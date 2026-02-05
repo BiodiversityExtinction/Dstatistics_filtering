@@ -1,4 +1,4 @@
-Dstats Population Structure Toolkit
+Dstats Population Structure and Filtering Toolkit
 
 This repository provides a command-line script for filtering, summarising, and visualising D-statistics (ABBA–BABA) output from ANGSD.
 
