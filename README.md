@@ -1,136 +1,178 @@
-Dstats Population Structure and Filtering Toolkit
 
-This repository provides a command-line script for filtering, summarising, and visualising D-statistics (ABBA–BABA) output from ANGSD.
+Choose `-s` based on your dataset. If you see extreme Z values (e.g. 50–200+) and warnings that suggest few informative sites, increase `-s`.
 
-The tool is designed to work directly with the block-jackknifed output produced by angsd -doAbbababa (i.e. tables containing H1, H2, H3, D-statistic estimates, standard errors, and Z-scores). It implements a topology-based framework to distinguish signal caused by incorrect population topology from signal potentially caused by introgression, and to summarise D-statistic results across multiple individuals.
+---
 
-────────────────────
-Input files
-────────────────────
+## Outputs
 
-1) ANGSD D-statistics output  
-   A block-jackknifed D-statistics file produced using ANGSD (e.g. via jackKnife.R).  
-   The file must contain at least the following columns:
-   - H1, H2, H3 (sample IDs)
-   - D or Dstat (or jackEst)
-   - SE
-   - Z
+All outputs are prefixed by `-p <prefix>`.
 
-2) Sample-to-population mapping file  
-   A plain-text file with two columns:
-   - sample ID
-   - population name  
-   (whitespace- or tab-delimited)
+### Topology test outputs (always produced)
+- `<prefix>.topology.all.tsv`  
+  All extracted rows across all population pairs and types (Right/Wrong/Within).
 
-   This mapping is used to assign samples to populations and removes any dependence on sample naming conventions.
+- `<prefix>.topology.summary.tsv`  
+  Summary per `(DoubPop, SingPop, Type)` including:
+  - `n`
+  - `prop_sig` (using `|Z| > zthr`)
+  - `mean_Z`, `median_Z`
+  - `mean_D`, `median_D`
+  - (and any added diagnostics such as site counts if enabled)
 
-────────────────────
-Command-line parameters
-────────────────────
+- `<prefix>.topology.wilcox.tsv`  
+  Wilcoxon test of `Z ~ Type` comparing Right vs Wrong per pair (BH adjusted).  
+  This is a diagnostic to see if Right and Wrong behave differently, not a definitive test.
 
-Required:
-- -i  Input ANGSD block-jackknifed D-statistics file
-- -m  Sample-to-population mapping file
-- -p  Output prefix
+- `<prefix>.topology.Z_box_ALLpairs.pdf`  
+  Boxplot of Z distributions by pair and Type.
 
-Optional:
-- -z  Z-score threshold used to define “significant” results (default: 3)
-- -R  Enable extraction and summarisation of standard (“real”) D-statistic comparisons
-      where H1, H2, and H3 all belong to different populations
+- `<prefix>.topology.heatmap_meanZ.pdf`  
+  Multi-page PDF: heatmaps of mean Z for Right / Wrong / Within (separate page per Type).
 
-All analyses are run from a single command. Required R packages are automatically checked
-and installed if missing.
+- `<prefix>.topology.heatmap_propSig.pdf`  
+  Faceted heatmap of proportion significant by Type (fixed 0–1 scale).
 
-────────────────────
-Topology-based analyses
-────────────────────
+### “Real” outputs (only with `-R`)
+- `<prefix>.real.tsv`  
+  Distinct-population triples, canonicalised H1/H2 with sign flips applied.
 
-Using the population assignments, the script automatically tests all population
-combinations and classifies each D-statistic into one of three categories:
+- `<prefix>.real.summary.tsv`  
+  Summary by `(H1pop, H2pop, H3pop)` including:
+  - `n`
+  - prop_sig_positive / negative / total (using zthr)
+  - mean/median Z and D
+  - (and optionally site diagnostics)
 
-- Correct topologies:
-  H1 and H2 belong to the same population, H3 belongs to a different population.
+- `<prefix>.real.heatmap_meanZ.pdf`  
+  Multi-page heatmap PDF: one page per H3pop (top H3 by number of comparisons).
 
-- Incorrect topologies:
-  H2 and H3 belong to the same population, H1 belongs to a different population.
-  D and Z values are sign-flipped where necessary to enforce a consistent orientation.
+### Tree / cladogram outputs (only with `-T`, and requires `-R`)
+- `<prefix>.quartet_votes.tsv`  
+  One row per trio (A,B,C) showing which sister pair won and the score margin.
 
-- Within-population comparisons:
-  H1, H2, and H3 all belong to the same population.
+- `<prefix>.quartet_support.tsv` (or similar)  
+  Pairwise support table: how often each pair wins as sisters (normalised by opportunities).
 
-These categories are used to summarise and contrast D-statistic behaviour across
-replicate individual-level tests.
+- `<prefix>.quartetNJ.nwk`  
+  Newick topology. Treat as a cladogram (branch lengths not meaningful).
 
-────────────────────
-Optional “real” D-statistic comparisons
-────────────────────
+- `<prefix>.quartetNJ.pdf`  
+  Tree plot for quick visualisation.
 
-When the -R flag is used, the script additionally extracts all D-statistics where
-H1, H2, and H3 belong to three different populations.
+If resampling support is implemented:
+- `<prefix>.quartetNJ.resample_support.tsv`  
+  “Triplet vote resampling support” for internal nodes.
+- `<prefix>.quartetNJ.resample_trees.nwk`  
+  Set of resampled trees.
 
-For these comparisons:
-- H1 and H2 are canonicalised (e.g. alphabetically) so that equivalent tests
-  such as (A,B,C) and (B,A,C) are collapsed into a single orientation.
-- D and Z values are sign-flipped when H1/H2 are swapped.
-- Results are summarised across individuals for each population triple.
+---
 
-────────────────────
-Outputs
-────────────────────
+## Understanding the “tree” output
 
-Tabular outputs:
-- <prefix>.topology.all.tsv
-  All topology-classified D-statistic results.
+### What “who tends to be sister?” means
+For each trio of populations (A,B,C):
 
-- <prefix>.topology.summary.tsv
-  Summary statistics per population pair and topology class, including:
-  number of tests, mean and median D, mean and median Z, and proportion of tests
-  exceeding the Z threshold.
+- compute a score for each resolution (A,B)|C, (A,C)|B, (B,C)|A
+- pick the winner (smallest score)
+- that is a **within-trio** decision
 
-- <prefix>.topology.wilcox.tsv
-  Wilcoxon tests comparing Z distributions between correct and incorrect topologies
-  for each population pair (with BH correction).
+Then across all trios, aggregate winners to see:
 
-- <prefix>.real.tsv (optional)
-  Canonicalised “real” D-statistic comparisons where all populations are distinct.
+- which pairs most often win as sisters
+- and build a global cladogram-like summary
 
-- <prefix>.real.summary.tsv (optional)
-  Summary statistics for real D-statistic population triples.
+### What it does NOT mean
+- It is not a rooted phylogeny
+- It is not a coalescent species tree
+- It does not produce meaningful branch lengths
+- It can be biased by missingness / uneven site counts
 
-────────────────────
-Plots
-────────────────────
+---
 
-All plots are written as PDF files suitable for inspection or inclusion as supplementary figures.
+## Common issues & troubleshooting
 
-Topology-based plots:
-- <prefix>.topology.Z_box_ALLpairs.pdf  
-  Boxplots of Z-score distributions for all population pairs (correct, incorrect,
-  and within-population). The y-axis is capped at the 99th percentile to prevent
-  extreme values from obscuring structure.
+### “could not find function %>%”
+This means the R packages providing `%>%` (usually **dplyr** or magrittr) were not loaded.
 
-- <prefix>.topology.heatmap_meanZ.pdf  
-  A multi-page PDF containing mean Z heatmaps:
-    page 1: correct topologies
-    page 2: incorrect topologies
-    page 3: within-population comparisons  
-  Each page uses its own symmetric colour scale to preserve contrast even when
-  some comparisons have very large values.
+- The script should `library(dplyr)` early.  
+- If the cluster blocks package installs, pre-install dependencies:
+  - `install.packages("dplyr")` (and the others) in an interactive session
+  - or use conda / renv / a shared R library
 
-- <prefix>.topology.heatmap_propSig.pdf  
-  Heatmaps showing the proportion of tests with |Z| greater than the chosen threshold,
-  faceted by topology class.
+### “cannot compute exact p-value with ties” (Wilcoxon warning)
+This is normal when there are ties in Z values. R falls back to an approximation.
 
-Real D-statistic plots (optional):
-- <prefix>.real.heatmap_meanZ.pdf  
-  A multi-page PDF with one page per H3 population (top H3 populations by number of tests),
-  showing mean Z values for canonicalised H1/H2 comparisons. Each page has its own
-  colour scale.
+This warning does **not** mean your population is “weird”. It usually means:
+- many identical Z values (often from repeated or discrete outcomes), or
+- small sample size per group
 
-────────────────────
-Intended use
-────────────────────
+If Wilcoxon is not central to your analysis, you can ignore these warnings.
 
-This tool is intended for exploratory population structure analyses, summarising
-multiple individual-level D-statistic results, identifying consistent signals of
-gene flow, and diagnosing topology-driven artefacts in D-statistics derived from ANGSD.
+### Extremely high |Z| (e.g., 50–200+)
+Often indicates tiny SE due to:
+- small number of informative sites
+- uneven missingness
+- a small subset of blocks dominating
+
+Fixes:
+- use a minimum-sites filter (`-s`)
+- inspect distributions of site counts / ABBA+BABA
+- remove or merge problematic populations with too little data
+- interpret Z as a diagnostic, not as a truth signal
+
+### Tree looks very different from PCA
+This can happen because:
+- PCA captures overall covariance structure across many loci
+- D-stat triplet votes capture specific **asymmetry signals** (often admixture-like)
+- missingness can distort which triplets are “decidable”
+
+Suggested checks:
+- verify populations have comparable site counts across comparisons
+- increase `-s`
+- compare only a subset of well-covered populations
+- inspect `<prefix>.quartet_votes.tsv` to see which trios drive the topology
+
+### “replacement has length zero” / Newick manipulation errors
+This typically indicates a bug in tree-string editing or that the tree-building algorithm received an empty or malformed set of votes.
+
+Fixes:
+- confirm `-R` outputs have enough rows
+- confirm at least 4 populations with sufficient data
+- check that after filtering there are still complete trios (all three resolutions present)
+- raise/lower `-s` depending on whether filtering is too strict
+
+---
+
+## Best practices
+
+- Treat Z-based “significance” as **screening**, not confirmation.
+- Always look at data quantity diagnostics (ABBA/BABA or site counts).
+- Prefer **vote tables and support summaries** over branch lengths.
+- When you have few individuals per population, avoid overstating bootstrap-like supports.
+- Keep outputs and script version together for reproducibility.
+
+---
+
+## Citation / attribution
+
+If you use this tool in a paper or report, cite:
+- ANGSD (for D-statistics computation)
+- the relevant D-statistics methodology (ABBA-BABA / Patterson’s D)
+
+This script itself is a convenience wrapper to organise and visualise ANGSD outputs; it does not implement D-statistics from scratch.
+
+---
+
+## License
+
+Add your license here (e.g., MIT, GPL-3.0, etc.).
+
+---
+
+## Contact / Issues
+
+Open a GitHub issue with:
+- your command line used
+- the first 30 lines of the input files (with sensitive IDs removed)
+- the exact error output
+- the generated `<prefix>.*.tsv` summaries if available
