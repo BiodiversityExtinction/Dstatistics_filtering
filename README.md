@@ -1,237 +1,208 @@
-# dstats_poptests_report.sh
+# DstatWorkbench.R
 
-A bash + R reporting tool that summarises ANGSD block-jackknifed D-statistics into population-level topology tests, distinct-population (“real”) triplet summaries, and an optional cladogram-style topology summary based on aggregated “who tends to be sister?” votes across population triplets.
+`DstatWorkbench.R` is an R CLI for filtering and summarizing ANGSD block-jackknifed D-statistics, with optional plotting, topology consistency checks, ranking, and PCA/ordination outputs.
 
-This tool is designed for datasets with few individuals per population, where classic phylogenetic branch lengths and traditional bootstraps can be misleading. It focuses on robust summaries and topology tendencies rather than divergence time inference.
+This repository is documented for the R CLI only. Bash variants are not part of the supported interface.
 
----
+## What it does
 
-## Overview
+From an ANGSD D-stat table and a sample-to-population map, the script can:
 
-Given:
-
-1. An ANGSD block-jackknifed D-statistics file (with columns including H1, H2, H3, SE, Z and jackEst/Dstat/D)
-2. A sample-to-population mapping file
-
-The script produces:
-
-- Population-level topology tests (Right / Wrong / Within patterns)
-- Summary tables with D and Z statistics
-- Diagnostic plots (Z distributions and heatmaps)
-- Optional distinct-population triple summaries
-- Optional cladogram based on aggregated triplet sister votes
-
----
-
-## Conceptual summary
-
-### Topology test (Right / Wrong / Within)
-
-For each ordered population pair:
-
-- One population is treated as the “double” population (H1/H2).
-- Another is treated as the “single” population (H3).
-
-The script extracts rows from the ANGSD file that match:
-
-- Right: H1,H2 in DoubPop and H3 in SingPop
-- Wrong: configurations implying the alternative topology (with sign correction applied)
-- Within: all three individuals from the same population
-
-It summarises Z and D distributions per population pair and test type.
-
-### Real (distinct-population) triplets
-
-If enabled, the script extracts only comparisons where H1pop, H2pop and H3pop are all distinct.
-
-- H1pop/H2pop are canonicalised (alphabetically sorted).
-- D and Z are sign-flipped when H1/H2 are swapped.
-- Each population triple is summarised consistently.
-
-### Cladogram: “who tends to be sister?”
-
-For each population triplet (A,B,C):
-
-- Evaluate the three possible resolutions:
-  - (A,B)|C
-  - (A,C)|B
-  - (B,C)|A
-- Select the resolution with the smallest |mean_Z| (i.e. most tree-like for that trio).
-- Record the winning sister pair for that trio.
-
-These per-trio “sister” votes are aggregated across all triplets to build a cladogram-style topology.
-
-Important:
-- This is not a phylogenetic distance tree.
-- Branch lengths are not meaningful.
-- It is a topology summary based on triplet tendencies.
-
----
-
-## Interpretation cautions
-
-1. Z values can be inflated if SE is very small (often due to missing data or low informative site counts).
-2. |Z| > threshold should be treated as a heuristic diagnostic.
-3. The optional resampling is triplet resampling, not classical sequence bootstrapping.
-4. Branch lengths in the tree output must not be interpreted biologically.
-
----
+- Extract canonical distinct-population triples (`--triples`)
+- Summarize triples by population combination
+- Build trio-vote support matrices (both Z-based and D-based)
+- Run population ordination (`--pcaPop`) from support matrices
+- Run individual PCA (`--pcaInd`) from H3-focused affinity profiles
+- Plot topology diagnostics (`--topology`)
+- Rank likely sister populations for target H3 populations/samples (`--rankH3Pop`, `--rankH3Ind`)
+- Filter triple comparisons by a supplied rooted tree (`--plotRealByTree`)
+- Plot D-score distributions for selected H3 individuals (`--plotH3Ind`)
 
 ## Requirements
 
-Command line:
-- bash
-- awk
-- sort / coreutils
+R packages:
 
-R:
-- dplyr
-- tidyr
-- ggplot2
-- scales
-- viridisLite
-- ape (if tree mode enabled)
+- `dplyr`
+- `tidyr`
+- `ggplot2`
+- `ape` (only required for `--plotRealByTree`)
 
-The script attempts to install missing packages from CRAN if needed.
-
----
+The script does not auto-install packages; it fails with a clear message if missing.
 
 ## Inputs
 
-### 1. ANGSD D-statistics file (-i)
+### 1. D-stat file (`--input`)
 
-Must include header columns:
-- H1
-- H2
-- H3
-- SE
-- Z
-- jackEst or Dstat or D
+ANGSD block-jackknifed table with header containing:
 
-### 2. Sample-to-population map (-m)
+- `H1`, `H2`, `H3`
+- `SE`, `Z`
+- one of `jackEst` / `Dstat` / `D`
 
-Whitespace-delimited 2-column file:
+For site filtering, the script uses:
 
-SampleID  Population
+- `nABBA + nBABA` if both columns exist
+- otherwise `nSites` if present
+- otherwise `0`
 
-Example:
+### 2. Population map (`--Popfile`)
 
-Ind01  Saitama  
-Ind02  Saitama  
-Ind03  Hokuriku  
-Ind04  Shikoku  
+Two-column whitespace-delimited file:
 
-Lines beginning with # are ignored.
-
----
+- column 1: `SampleID`
+- column 2: `PopulationID`
 
 ## Usage
 
-dstats_poptests_report.sh -i dstats_jackknifed.txt -m sample_to_pop.txt -p out_prefix [options]
+```bash
+Rscript DstatWorkbench.R \
+  --input dstats.jack.txt \
+  --Popfile sample_to_pop.txt \
+  --out run_prefix \
+  [options]
+```
 
-Required:
-- -i  ANGSD D-stat file
-- -m  Sample-to-population map
-- -p  Output prefix
+## Parameters
 
-Optional:
-- -z  Z threshold (default 3)
-- -R  Also output distinct-population triplet summaries
-- -T  Build cladogram from triplet votes (requires -R)
-- -B  Number of triplet resampling replicates (requires -T)
+### Required
 
----
+- `--input FILE`: D-stat input table
+- `--Popfile FILE`: sample-to-population map
+- `--out PREFIX`: output prefix
 
-## Example workflows
+### Core filters
 
-Basic topology summaries:
+- `--minsites INT`: minimum informative sites to retain a row (default `0`)
+- `-z FLOAT`: significance threshold for `|Z|` labels (default `3`)
 
-./dstats_poptests_report.sh \
-  -i dstats_jackknifed.txt \
-  -m sample_to_pop.txt \
-  -p results/topology \
-  -z 3
+### Main analysis switches
 
-With real triplet summaries:
+- `--triples`: build distinct-population triple tables (`.real.tsv`, `.real.summary.tsv`)
+- `--topology`: produce topology pairplot TSV/PDF
+- `--votes`: build trio-vote tables and support matrices (requires `--triples`)
+- `--pcaPop[=POP_IDS]`: population ordination from support matrix (requires `--triples`)
+  - optional comma-separated population subset
+- `--pcaInd[=SAMPLE_IDS]`: individual PCA from H3-only affinity (requires `--triples`)
+  - optional comma-separated sample subset
+- `--rankH3Pop POP`: rank closest populations where `H3pop == POP`
+- `--rankH3Ind SAMPLE`: rank closest populations where `H3 == SAMPLE`
+- `--plotH3Ind LIST`: comma-separated H3 sample IDs for D-score plotting
+- `--plotRealByTree FILE.nwk`: keep only triples consistent with rooted tree topology (requires `--triples`)
+  - tree must contain tip `Outgroup`
 
-./dstats_poptests_report.sh \
-  -i dstats_jackknifed.txt \
-  -m sample_to_pop.txt \
-  -p results/real \
-  -R \
-  -z 3
+### PCA controls
 
-With cladogram:
+- `--pcaK INT`: number of PCs written to TSV (default `6`, minimum `2`)
+- `--pcaPlotPC A,B`: PCs plotted in PDF (default `1,2`)
 
-./dstats_poptests_report.sh \
-  -i dstats_jackknifed.txt \
-  -m sample_to_pop.txt \
-  -p results/tree \
-  -R -T \
-  -z 3
+## Z-based vs D-based outputs
 
-With triplet resampling:
+For `--votes`, `--pcaPop`, and `--pcaInd`, the script writes both:
 
-./dstats_poptests_report.sh \
-  -i dstats_jackknifed.txt \
-  -m sample_to_pop.txt \
-  -p results/tree_boot \
-  -R -T \
-  -B 200 \
-  -z 3
+- Z-based outputs (default filenames)
+- D-based sensitivity outputs with `.d.` in filename
 
----
+This lets you compare robustness when low site counts may inflate Z.
 
 ## Output files
 
-Topology outputs:
-- <prefix>.topology.all.tsv
-- <prefix>.topology.summary.tsv
-- <prefix>.topology.wilcox.tsv
-- <prefix>.topology.Z_box_ALLpairs.pdf
-- <prefix>.topology.heatmap_meanZ.pdf
-- <prefix>.topology.heatmap_propSig.pdf
+Only files relevant to selected options are written.
 
-Real outputs (with -R):
-- <prefix>.real.tsv
-- <prefix>.real.summary.tsv
-- <prefix>.real.heatmap_meanZ.pdf
+### `--triples`
 
-Tree outputs (with -T):
-- <prefix>.quartet_votes.tsv
-- <prefix>.quartet_support.tsv
-- <prefix>.quartet.nwk
-- <prefix>.quartet.pdf
+- `<prefix>.real.tsv`
+  - distinct-population triple rows with canonicalized `H1pop/H2pop`
+- `<prefix>.real.summary.tsv`
+  - grouped summary per `H1pop,H2pop,H3pop`
 
-Resampling outputs (with -B):
-- <prefix>.quartet.bootstrap_support.tsv
-- <prefix>.quartet.bootstrap_trees.nwk
+### `--plotRealByTree`
 
----
+- `<prefix>.real.byTree.tsv`
+- `<prefix>.real.byTree.pdf`
 
-## Recommended reporting wording
+### `--topology`
 
-Instead of:
-“Bootstrap support”
+- `<prefix>.topology.mapped_rows.tsv`
+- `<prefix>.topology.pairplot.tsv`
+- `<prefix>.topology.pairplot.pdf`
 
-Use:
-“Triplet-vote resampling support”
+### `--votes` (also produced when `--pcaPop` or `--pcaInd` is requested)
 
-Instead of:
-“Phylogenetic tree”
+Z-based:
 
-Use:
-“Cladogram summarising aggregated triplet sister tendencies”
+- `<prefix>.votes.tsv`
+- `<prefix>.support_matrix.tsv`
 
----
+D-based:
 
+- `<prefix>.votes.d.tsv`
+- `<prefix>.support_matrix.d.tsv`
 
----
+### `--pcaPop`
 
-## Issues
+Z-based:
 
-When reporting issues, include:
-- Command used
-- First ~20 lines of input files (anonymised if necessary)
-- Full error message
-- Relevant summary TSV outputs
+- `<prefix>.pca.pop.tsv`
+- `<prefix>.pca.pop.pdf`
+
+D-based:
+
+- `<prefix>.pca.pop.d.tsv`
+- `<prefix>.pca.pop.d.pdf`
+
+### `--pcaInd`
+
+Z-based:
+
+- `<prefix>.pca.ind.tsv`
+- `<prefix>.pca.ind.pdf`
+
+D-based:
+
+- `<prefix>.pca.ind.d.tsv`
+- `<prefix>.pca.ind.d.pdf`
+
+### `--rankH3Pop`
+
+- `<prefix>.rankH3Pop.tsv`
+
+### `--rankH3Ind`
+
+- `<prefix>.rankH3Ind.tsv`
+
+### `--plotH3Ind`
+
+- `<prefix>.plotH3Ind.mapped_rows.tsv`
+- `<prefix>.plotH3Ind.tsv`
+- `<prefix>.plotH3Ind.pdf`
+
+## Example commands
+
+All main analyses:
+
+```bash
+Rscript DstatWorkbench.R \
+  --input Japan_mod_anc_all_Dstats_specout.jack.txt \
+  --Popfile Bamlist_Dstats_wanc.pops \
+  --out test \
+  --triples --topology --votes \
+  --pcaPop --pcaInd --pcaK 3 --pcaPlotPC 1,2
+```
+
+Tree-filtered triple plot + selected H3 plotting:
+
+```bash
+Rscript DstatWorkbench.R \
+  --input Japan_mod_anc_all_Dstats_specout.jack.txt \
+  --Popfile Bamlist_Dstats_wanc.pops \
+  --out test \
+  --triples \
+  --plotRealByTree tree.nwk \
+  --plotH3Ind Kumamoto_his,Saitama-217_his,Saitama-218_his,Saitama-220_his
+```
+
+## Interpretation notes
+
+- `|Z| > threshold` is a diagnostic heuristic based on block-jackknife Z.
+- Very low informative-site counts can inflate Z; use `--minsites` and compare `.d.` outputs.
+- If Z- and D-based PCA/ordination disagree strongly, treat low-coverage samples with caution.
