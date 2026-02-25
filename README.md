@@ -111,70 +111,92 @@ Only files relevant to selected options are written.
 ### `--triples`
 
 - `<prefix>.real.tsv`
-  - distinct-population triple rows with canonicalized `H1pop/H2pop`
+  - Row-level distinct-population comparisons (`H1pop/H2pop/H3pop` all different), with canonicalized `H1pop/H2pop` and sign-adjusted `D`,`Z`.
 - `<prefix>.real.summary.tsv`
-  - grouped summary per `H1pop,H2pop,H3pop`
+  - Grouped summaries per population triple: counts, site depth summaries, proportions above `|Z|` threshold, and central tendency for `Z` and `D`.
 
 ### `--plotRealByTree`
 
 - `<prefix>.real.byTree.tsv`
+  - Subset of triple rows consistent with the supplied rooted tree topology, including significance label (`sig`/`non`).
 - `<prefix>.real.byTree.pdf`
+  - Jitter plot of `D` for tree-consistent topologies (`x=D`, `y=topology`, point shape indicates significance).
 
 ### `--topology`
 
 - `<prefix>.topology.mapped_rows.tsv`
+  - All mapped/filter-passing input rows with sample/pop labels and numeric fields (`D`,`SE`,`Z`,`nSites`).
 - `<prefix>.topology.pairplot.tsv`
+  - Plot-ready table of pairwise topology contrasts (`(Pop1,Pop1),Pop2` vs `(Pop1,Pop2),Pop1`) with `D`.
 - `<prefix>.topology.pairplot.pdf`
+  - Jitter plot comparing topology contrast `D` distributions across population pairs.
 
 ### `--votes` (also produced when `--pcaPop` or `--pcaInd` is requested)
 
 Z-based:
 
 - `<prefix>.votes.tsv`
+  - One row per population trio (`A,B,C`) with winning sister pair and trio-resolution scores (from `abs(mean_Z)`).
 - `<prefix>.support_matrix.tsv`
+  - Symmetric pairwise sister-support matrix (0-1) derived from Z-based trio votes.
 
 D-based:
 
 - `<prefix>.votes.d.tsv`
+  - Same as `.votes.tsv`, but trio-resolution scores use `abs(mean_D)`.
 - `<prefix>.support_matrix.d.tsv`
+  - Same as `.support_matrix.tsv`, but derived from D-based votes.
 
 ### `--pcaPop`
 
 Z-based:
 
 - `<prefix>.pca.pop.tsv`
+  - Population coordinates from MDS on `1 - support_matrix` (Z-based support).
 - `<prefix>.pca.pop.pdf`
+  - Population ordination plot from Z-based support matrix.
 
 D-based:
 
 - `<prefix>.pca.pop.d.tsv`
+  - Population coordinates from MDS on `1 - support_matrix.d` (D-based support).
 - `<prefix>.pca.pop.d.pdf`
+  - Population ordination plot from D-based support matrix.
 
 ### `--pcaInd`
 
 Z-based:
 
 - `<prefix>.pca.ind.tsv`
+  - Individual PC coordinates from H3-only signed affinity profiles built with `Z` (`H1=-Z`, `H2=+Z`).
 - `<prefix>.pca.ind.pdf`
+  - Individual PCA scatter plot from Z-based affinities.
 
 D-based:
 
 - `<prefix>.pca.ind.d.tsv`
+  - Individual PC coordinates from H3-only signed affinity profiles built with `D` (`H1=-D`, `H2=+D`).
 - `<prefix>.pca.ind.d.pdf`
+  - Individual PCA scatter plot from D-based affinities.
 
 ### `--rankH3Pop`
 
 - `<prefix>.rankH3Pop.tsv`
+  - Ranked candidate sister populations for target `H3pop`, with weighted wins (`abs(Z)`) and win counts.
 
 ### `--rankH3Ind`
 
 - `<prefix>.rankH3Ind.tsv`
+  - Ranked candidate sister populations for target H3 sample, with weighted wins (`abs(Z)`) and win counts.
 
 ### `--plotH3Ind`
 
 - `<prefix>.plotH3Ind.mapped_rows.tsv`
+  - Full mapped/filter-passing rows used as the source table for H3 plotting.
 - `<prefix>.plotH3Ind.tsv`
+  - Filtered plot table for selected H3 individuals: `D`,`Z`, comparison label (`H1pop_H2pop`), significance label, and metadata.
 - `<prefix>.plotH3Ind.pdf`
+  - Jitter plot of `D` for selected H3 individuals (`x=D`, `y=H3`, color=`H1pop_H2pop`, shape by significance).
 
 ## Example commands
 
